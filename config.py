@@ -79,7 +79,8 @@ FACT_GROUNDING = True
 # When Gemini has no key or runs out of quota: Groq → OpenRouter → Pollinations
 # (Pollinations is keyless, so the pipeline never dead-ends)
 KEYLESS_LLM_FALLBACK = True
-GROQ_MODEL           = "llama-3.3-70b-versatile"
+GROQ_MODEL           = "openai/gpt-oss-120b"
+# Flagged for manual verification (status unconfirmed)
 OPENROUTER_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
 
 # Image sources tried after Pexels, in order:
@@ -113,7 +114,7 @@ BRAND_TEXT         = ""
 THUMB_STYLE        = "impact"
 
 # Adds "Made with YAAS by Raunak Patil · https://raunakpatil.com" to descriptions
-CREDIT_YAAS        = True
+CREDIT_YAAS        = False
 
 
 def brand_text() -> str:
@@ -140,13 +141,11 @@ VOICE_PITCH = "-3Hz"    # slightly deeper = more cinematic
 #  through all models below if quota or errors are hit.
 #  Change this in the GUI under Settings → AI Model (saved to settings.json).
 #  Options (free tier):
-#    gemini-2.5-flash        — highest quality   (500 req/day)
-#    gemma-4-31b-it          — Gemma 4 31B       (500 req/day)
-#    gemini-2.0-flash        — recommended       (1500 req/day)  ← default
-#    gemini-2.0-flash-lite   — fastest           (1500 req/day)
-#    gemini-1.5-flash-001    — reliable fallback (1500 req/day)
+#    gemma-4-31b-it          — primary, most stable long-term (free)  ← default
+#    gemini-3.1-flash-lite   — secondary fallback (free tier confirmed)
+#    gemma-3-27b-it          — tertiary fallback (free)
 # ─────────────────────────────────────────
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemma-4-31b-it"
 
 # ─────────────────────────────────────────
 #  Video Dimensions

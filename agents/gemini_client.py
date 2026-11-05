@@ -7,11 +7,10 @@ LLM Client — shared across all agents.
    free fallback chain in apis/llm.py: Groq → OpenRouter → Pollinations
    (keyless), so generation always has somewhere to go.
 
-Free-tier daily limits (approximate):
-  gemini-2.5-flash      → 500 req/day
-  gemini-2.0-flash      → 1,500 req/day
-  gemini-2.0-flash-lite → 1,500 req/day
-  gemma-4-31b-it        → 500 req/day
+Free-tier models:
+  gemma-4-31b-it        → primary (free, most stable long-term)
+  gemini-3.1-flash-lite → secondary fallback (free tier confirmed)
+  gemma-3-27b-it        → tertiary fallback (free)
 """
 import time
 import config
@@ -20,14 +19,9 @@ import config
 # The actual runtime order is determined by build_chain() below,
 # which rotates this list so config.GEMINI_MODEL comes first.
 _ALL_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemma-4-31b-it",        # Gemma 4 31B dense — strong reasoning, free tier
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemma-3-27b-it",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-pro-001",
+    "gemma-4-31b-it",        # Primary: Gemma 4 31B dense (free, no paid tier, most stable long-term)
+    "gemini-3.1-flash-lite", # Secondary fallback: Gemini 3.1 Flash-Lite (free tier confirmed)
+    "gemma-3-27b-it",        # Tertiary fallback: Gemma 3 27B (older, functional, free)
 ]
 
 # Which provider answered the last call — shown in the GUI

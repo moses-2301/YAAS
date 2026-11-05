@@ -22,11 +22,12 @@ def providers() -> list:
     groq = getattr(config, "GROQ_API_KEY", "")
     if _real_key(groq):
         out.append(("groq", "https://api.groq.com/openai/v1/chat/completions",
-                    getattr(config, "GROQ_MODEL", "llama-3.3-70b-versatile"),
+                    getattr(config, "GROQ_MODEL", "openai/gpt-oss-120b"),
                     {"Authorization": f"Bearer {groq}"}))
     orouter = getattr(config, "OPENROUTER_API_KEY", "")
     if _real_key(orouter):
         out.append(("openrouter", "https://openrouter.ai/api/v1/chat/completions",
+                    # Note: OpenRouter model flagged for manual verification (status unconfirmed)
                     getattr(config, "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
                     {"Authorization": f"Bearer {orouter}",
                      "HTTP-Referer": "https://github.com/raunakpatil/youtube-agentic-ai-studio",

@@ -934,8 +934,9 @@ def create_video(script: dict, audio_path: str, output_dir: str,
 
         output_path = os.path.join(output_dir, "final_video.mp4")
 
-    # ── WATERMARK (always on) ──────────────────────────────────
-    final = _apply_watermark(final, W, H)
+    # ── WATERMARK ──────────────────────────────────────────────
+    if getattr(config, "CREDIT_YAAS", False):
+        final = _apply_watermark(final, W, H)
 
     # ── EXPORT ─────────────────────────────────────────────────
     total_secs = int(final.duration)

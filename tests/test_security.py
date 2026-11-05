@@ -71,6 +71,46 @@ def test_local_hosts_are_allowed(client, host):
     assert client.get("/api/banned-topics", headers={"Host": host}).status_code == 200
 
 
+def test_reverse_proxy_with_x_forwarded_for_is_allowed(client):
+    headers = {
+        "Host": "subdomain.example.com",
+        "X-Forwarded-For": "127.0.0.1",
+        "X-Forwarded-Proto": "https",
+    }
+    assert client.get("/api/banned-topics", headers=headers).status_code == 200
+
+
+def test_reverse_proxy_with_forwarded_client_ip_is_allowed(client):
+    headers = {
+        "Host": "subdomain.example.com",
+        "X-Forwarded-For": "203.0.113.195, 127.0.0.1",
+        "X-Forwarded-Proto": "https",
+    }
+    assert client.get("/api/banned-topics", headers=headers).status_code == 200
+
+
+def test_reverse_proxy_matching_origin_is_allowed(client):
+    headers = {
+        "Host": "subdomain.example.com",
+        "Origin": "https://subdomain.example.com",
+        "X-Forwarded-For": "127.0.0.1",
+        "X-Forwarded-Proto": "https",
+    }
+    r = client.post("/api/seo", json=SEO, headers=headers)
+    assert r.status_code == 200
+
+
+def test_reverse_proxy_cross_site_origin_is_blocked(client):
+    headers = {
+        "Host": "subdomain.example.com",
+        "Origin": "https://evil.example",
+        "X-Forwarded-For": "127.0.0.1",
+        "X-Forwarded-Proto": "https",
+    }
+    r = client.post("/api/seo", json=SEO, headers=headers)
+    assert r.status_code == 403
+
+
 @pytest.mark.parametrize("netloc, name", [
     ("localhost:7070", "localhost"), ("127.0.0.1", "127.0.0.1"),
     ("[::1]:7070", "[::1]"), ("LOCALHOST:80", "localhost"),

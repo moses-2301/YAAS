@@ -7,6 +7,11 @@ without this a malicious page could start a run, change settings or publish to
 the user's YouTube channel. DNS rebinding (attacker.com resolving to 127.0.0.1)
 would also let that page read responses. Both are stopped here, for every
 route present and future.
+
+Reverse proxy support:
+When hosted behind a local reverse proxy (like nginx on 127.0.0.1), the Host
+header may carry a public subdomain. Requests are trusted if the connection
+was forwarded by a local proxy indicated by X-Forwarded-For and local origin.
 """
 from flask import jsonify, request
 
@@ -27,10 +32,19 @@ def _same_origin(url: str) -> bool:
     parts = urlsplit(url)
     return parts.scheme in ("http", "https") and parts.netloc.lower() == request.host.lower()
 
+def _is_trusted_local_proxy() -> bool:
+    """True when request comes through a local reverse proxy (e.g. nginx on 127.0.0.1)."""
+    xff = request.headers.get("X-Forwarded-For", "")
+    if not xff:
+        return False
+    ips = [ip.strip() for ip in xff.split(",") if ip.strip()]
+    return any(ip in _LOCAL_HOSTS for ip in ips) and (request.remote_addr in _LOCAL_HOSTS)
+
 def local_only():
-    # DNS rebinding: a browser always sends the name it used in the Host header
-    if _hostname(request.host) not in _LOCAL_HOSTS:
-        return jsonify({"ok": False, "error": "YAAS only accepts requests to localhost."}), 403
+    # DNS rebinding: allow direct localhost requests OR requests forwarded by local reverse proxy
+    is_local_host = _hostname(request.host) in _LOCAL_HOSTS
+    if not is_local_host and not _is_trusted_local_proxy():
+        return jsonify({"ok": False, "error": "YAAS only accepts requests to localhost or via trusted local proxy."}), 403
 
     if request.method not in _WRITE_METHODS:
         return None
