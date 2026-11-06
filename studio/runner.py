@@ -27,6 +27,10 @@ def run_pipeline_thread(steps: list, topic_override: str = "", video_type: str =
             raise InterruptedError(f"Stopped by user after {after_stage}")
 
     try:
+        active_pid = getattr(config, "get_active_profile_id", lambda: "default")()
+        niche_info = f" · Niche: {config.CHANNEL_NICHE}" if getattr(config, "CHANNEL_NICHE", "") else ""
+        log(f"Channel: {config.CHANNEL_NAME} ({active_pid}){niche_info}")
+
         Path(config.OUTPUT_DIR).mkdir(exist_ok=True)
         Path(config.IMAGES_DIR).mkdir(exist_ok=True)
 
@@ -44,7 +48,7 @@ def run_pipeline_thread(steps: list, topic_override: str = "", video_type: str =
             if use_trends and not topic_override:
                 try:
                     from apis.trends import headlines
-                    trend_context = headlines()
+                    trend_context = headlines(niche=getattr(config, "CHANNEL_NICHE", ""))
                 except Exception as e:
                     log(f"Trend Radar unavailable: {e}", "warn")
             research = research_topic(
@@ -52,6 +56,7 @@ def run_pipeline_thread(steps: list, topic_override: str = "", video_type: str =
                 topic_override      = topic_override,
                 focus_angle         = focus_angle,
                 trend_context       = trend_context,
+                channel_niche       = getattr(config, "CHANNEL_NICHE", ""),
             )
             state["research"] = research
             state.update(library_id=None, thumb_text=None, thumb_bg_index=0)

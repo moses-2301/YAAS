@@ -103,6 +103,7 @@ Every video should explore the absolute limits of science, space, or tech, makin
 Target audience: highly curious thinkers who want their minds blown by deep scientific and philosophical dives.
 """.strip()
 CHANNEL_NAME = "My AI Channel"   # shown on-screen and in upload metadata
+CHANNEL_NICHE = ""              # e.g. "Finance & Psychology", "Technology & AI"
 
 # On-video branding: the "▶ CHANNEL NAME" tag in the hook and on Shorts,
 # plus the channel line on thumbnails. Leave BRAND_TEXT empty to use CHANNEL_NAME.
@@ -241,7 +242,7 @@ IMAGES_DIR   = "output/images"
 # ─────────────────────────────────────────
 # Settings the GUI may save. Secrets are never stored here; they go to .env.
 USER_SETTINGS = (
-    "CHANNEL_NAME", "CHANNEL_DESCRIPTION", "SHOW_CHANNEL_BRAND", "BRAND_TEXT",
+    "CHANNEL_NAME", "CHANNEL_NICHE", "CHANNEL_DESCRIPTION", "SHOW_CHANNEL_BRAND", "BRAND_TEXT",
     "THUMB_STYLE", "CREDIT_YAAS",
     "VOICE_ID", "VOICE_RATE", "VOICE_PITCH",
     "GEMINI_MODEL", "GROQ_MODEL", "OPENROUTER_MODEL",
@@ -249,6 +250,12 @@ USER_SETTINGS = (
     "MUSIC_ENABLED", "MUSIC_VOLUME",
     "OVERLAY_OPACITY", "KB_ZOOM_START", "KB_ZOOM_END",
     "BROLL_INTERVAL", "BROLL_XFADE_DUR", "RENDER_PRESET", "VIDEO_PRIVACY",
+)
+
+PROFILE_SETTINGS = (
+    "CHANNEL_NAME", "CHANNEL_NICHE", "CHANNEL_DESCRIPTION", "SHOW_CHANNEL_BRAND",
+    "BRAND_TEXT", "THUMB_STYLE", "VOICE_ID", "VOICE_RATE", "VOICE_PITCH",
+    "TRENDS_GEO", "VIDEO_PRIVACY", "CREDIT_YAAS",
 )
 
 # The defaults above, before settings.json is applied
@@ -271,43 +278,214 @@ def _valid_setting(key: str, value) -> bool:
     return False
 
 
-def load_settings(path: str | None = None) -> dict:
-    """Saved settings, skipping unknown keys and wrong types. Missing file → {}."""
-    path = path or SETTINGS_PATH
+def _slug(text: str) -> str:
+    import re
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "channel").lower()).strip("-")[:40]
+    return s or "channel"
+
+
+def _read_raw_json(path: str) -> dict:
     try:
         with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+            return json.load(f)
     except FileNotFoundError:
         return {}
-    except (OSError, ValueError) as e:
-        print(f"   ⚠ Ignoring {os.path.basename(path)}: {e}")
+    except (OSError, ValueError):
         return {}
-    if not isinstance(data, dict):
-        print(f"   ⚠ Ignoring {os.path.basename(path)}: expected a JSON object")
+
+
+def _write_raw_json(path: str, data: dict) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def load_settings(path: str | None = None) -> dict:
+    """Saved settings for the active profile + global settings. Auto-migrates flat legacy files."""
+    path = path or SETTINGS_PATH
+    raw = _read_raw_json(path)
+    if not raw or not isinstance(raw, dict):
         return {}
-    good = {k: v for k, v in data.items() if _valid_setting(k, v)}
-    for k in data.keys() - good.keys():
-        print(f"   ⚠ Ignoring unknown or invalid setting in {os.path.basename(path)}: {k}")
+
+    # Migration check: if "profiles" key is missing, auto-migrate legacy flat format
+    if "profiles" not in raw:
+        channel_name = raw.get("CHANNEL_NAME", DEFAULTS["CHANNEL_NAME"])
+        pid = _slug(channel_name)
+        prof_data = {k: v for k, v in raw.items() if k in PROFILE_SETTINGS and _valid_setting(k, v)}
+        glob_data = {k: v for k, v in raw.items() if k not in PROFILE_SETTINGS and _valid_setting(k, v)}
+        raw = {
+            "active_profile": pid,
+            "profiles": {
+                pid: prof_data
+            },
+            "global": glob_data
+        }
+        _write_raw_json(path, raw)
+
+    active_id = raw.get("active_profile") or "default"
+    profiles = raw.get("profiles", {})
+    if active_id not in profiles and profiles:
+        active_id = next(iter(profiles))
+        raw["active_profile"] = active_id
+        _write_raw_json(path, raw)
+
+    active_data = profiles.get(active_id, {})
+    global_data = raw.get("global", {})
+
+    merged = {**global_data, **active_data}
+    good = {k: v for k, v in merged.items() if _valid_setting(k, v)}
     return good
+
+
+def get_active_profile_id(path: str | None = None) -> str:
+    path = path or SETTINGS_PATH
+    raw = _read_raw_json(path)
+    if "profiles" in raw and raw["profiles"]:
+        act = raw.get("active_profile")
+        if act and act in raw["profiles"]:
+            return act
+        return next(iter(raw["profiles"]))
+    return _slug(raw.get("CHANNEL_NAME", "default"))
+
+
+def list_profiles(path: str | None = None) -> list:
+    path = path or SETTINGS_PATH
+    raw = _read_raw_json(path)
+    if "profiles" not in raw:
+        load_settings(path)
+        raw = _read_raw_json(path)
+
+    profiles = raw.get("profiles", {})
+    if not profiles:
+        return [{
+            "id": "default",
+            "name": globals().get("CHANNEL_NAME", DEFAULTS["CHANNEL_NAME"]),
+            "niche": globals().get("CHANNEL_NICHE", DEFAULTS["CHANNEL_NICHE"]),
+            "active": True,
+        }]
+
+    active_id = raw.get("active_profile") or next(iter(profiles))
+    out = []
+    for pid, data in profiles.items():
+        name = data.get("CHANNEL_NAME", DEFAULTS["CHANNEL_NAME"])
+        niche = data.get("CHANNEL_NICHE", DEFAULTS["CHANNEL_NICHE"])
+        out.append({
+            "id": pid,
+            "name": name,
+            "niche": niche,
+            "active": pid == active_id,
+        })
+    return out
+
+
+def list_saved_niches(path: str | None = None) -> list:
+    """Return unique, non-empty niches saved across all channel profiles."""
+    profs = list_profiles(path)
+    niches = []
+    seen = set()
+    for p in profs:
+        n = (p.get("niche") or "").strip()
+        if n and n.lower() not in seen:
+            seen.add(n.lower())
+            niches.append(n)
+    return niches
+
+
+def set_active_profile(profile_id: str, path: str | None = None) -> bool:
+    path = path or SETTINGS_PATH
+    raw = _read_raw_json(path)
+    if "profiles" not in raw or profile_id not in raw["profiles"]:
+        return False
+    raw["active_profile"] = profile_id
+    _write_raw_json(path, raw)
+    return True
+
+
+def apply_active_profile(profile_id: str | None = None, path: str | None = None) -> None:
+    """Apply the active profile's settings (plus global settings) to config globals."""
+    path = path or SETTINGS_PATH
+    if profile_id:
+        set_active_profile(profile_id, path)
+    settings = load_settings(path)
+    for k in PROFILE_SETTINGS:
+        globals()[k] = copy.deepcopy(DEFAULTS[k])
+    globals().update(settings)
+
+
+def create_profile(name: str, niche: str = "", path: str | None = None) -> str:
+    path = path or SETTINGS_PATH
+    raw = _read_raw_json(path)
+    if "profiles" not in raw:
+        load_settings(path)
+        raw = _read_raw_json(path)
+
+    base_id = _slug(name)
+    pid = base_id
+    counter = 1
+    while pid in raw.get("profiles", {}):
+        pid = f"{base_id}-{counter}"
+        counter += 1
+
+    new_profile = {
+        "CHANNEL_NAME": name.strip(),
+        "CHANNEL_NICHE": niche.strip(),
+    }
+    raw.setdefault("profiles", {})[pid] = new_profile
+    raw["active_profile"] = pid
+    _write_raw_json(path, raw)
+    apply_active_profile(pid, path)
+    return pid
+
+
+def delete_profile(profile_id: str, path: str | None = None) -> bool:
+    path = path or SETTINGS_PATH
+    raw = _read_raw_json(path)
+    profiles = raw.get("profiles", {})
+    if profile_id not in profiles or len(profiles) <= 1:
+        return False
+    del profiles[profile_id]
+    if raw.get("active_profile") == profile_id:
+        raw["active_profile"] = next(iter(profiles))
+    _write_raw_json(path, raw)
+    apply_active_profile(None, path)
+    return True
 
 
 def save_settings(values: dict, path: str | None = None) -> None:
     """
-    Merge values into settings.json. Only values that differ from the defaults
-    are kept, so a later change to a default in this file still reaches you.
-    Written to a temp file and renamed, so a crash never leaves half a file.
+    Merge values into the active profile (or global) in settings.json. Only values
+    that differ from defaults are kept.
     """
     bad = [k for k, v in values.items() if not _valid_setting(k, v)]
     if bad:
         raise ValueError("Not a valid setting: " + ", ".join(sorted(bad)))
     path = path or SETTINGS_PATH
-    merged = {**load_settings(path), **values}
-    merged = {k: v for k, v in merged.items() if v != DEFAULTS[k]}
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(merged, f, indent=2, sort_keys=True, ensure_ascii=False)
-        f.write("\n")
-    os.replace(tmp, path)
+    raw = _read_raw_json(path)
+    if "profiles" not in raw:
+        load_settings(path)
+        raw = _read_raw_json(path)
+
+    active_id = raw.get("active_profile") or "default"
+    profiles = raw.setdefault("profiles", {})
+    cur_profile = profiles.setdefault(active_id, {})
+    cur_global = raw.setdefault("global", {})
+
+    for k, v in values.items():
+        if k in PROFILE_SETTINGS:
+            if v != DEFAULTS[k]:
+                cur_profile[k] = v
+            else:
+                cur_profile.pop(k, None)
+        else:
+            if v != DEFAULTS[k]:
+                cur_global[k] = v
+            else:
+                cur_global.pop(k, None)
+
+    _write_raw_json(path, raw)
+    apply_active_profile(active_id, path)
 
 
 def import_legacy_config(path: str) -> dict:

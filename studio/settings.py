@@ -26,6 +26,7 @@ _SETTINGS = {
     "music_enabled":    ("MUSIC_ENABLED",      bool),
     "music_volume":     ("MUSIC_VOLUME",       float),
     "channel_name":     ("CHANNEL_NAME",       str),
+    "channel_niche":    ("CHANNEL_NICHE",      str),
     "show_brand":       ("SHOW_CHANNEL_BRAND", bool),
     "thumb_style":      ("THUMB_STYLE",        str),
     "brand_text":       ("BRAND_TEXT",         str),
@@ -55,10 +56,69 @@ def get_settings():
     for k, (attr, typ) in _SETTINGS.items():
         val = getattr(config, attr, "")
         out[k] = _mask(val) if typ == "env" else val
-    out["channel_desc"]  = config.CHANNEL_DESCRIPTION.strip()
-    out["music_library"] = getattr(config, "MUSIC_LIBRARY_DIR", "")
-    out["banned_topics"] = load_banned_topics()
+    out["channel_desc"]    = config.CHANNEL_DESCRIPTION.strip()
+    out["channel_niche"]   = getattr(config, "CHANNEL_NICHE", "").strip()
+    out["channel_profile"] = config.get_active_profile_id()
+    out["profiles"]        = config.list_profiles()
+    out["music_library"]   = getattr(config, "MUSIC_LIBRARY_DIR", "")
+    out["banned_topics"]   = load_banned_topics()
     return jsonify(out)
+
+@bp.route("/api/profiles")
+def get_profiles():
+    return jsonify({
+        "active": config.get_active_profile_id(),
+        "profiles": config.list_profiles(),
+    })
+
+@bp.route("/api/profiles/active", methods=["POST"])
+def set_active_profile_route():
+    body = request.get_json(force=True) or {}
+    pid = (body.get("profile_id") or "").strip()
+    if not pid:
+        return jsonify({"ok": False, "error": "Missing profile_id"}), 400
+    if not config.set_active_profile(pid):
+        return jsonify({"ok": False, "error": f"Profile '{pid}' not found"}), 404
+    config.apply_active_profile(pid)
+    from apis import trends as tr
+    tr.get_trends.cache_clear()
+    from apis import youtube_stats
+    youtube_stats.channel_stats.cache_clear()
+    return jsonify({
+        "ok": True,
+        "active": pid,
+        "channel_name": config.CHANNEL_NAME,
+        "channel_niche": getattr(config, "CHANNEL_NICHE", ""),
+    })
+
+@bp.route("/api/profiles/create", methods=["POST"])
+def create_profile_route():
+    body = request.get_json(force=True) or {}
+    name = (body.get("name") or "").strip()
+    niche = (body.get("niche") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Channel name is required"}), 400
+    pid = config.create_profile(name=name, niche=niche)
+    from apis import trends as tr
+    tr.get_trends.cache_clear()
+    from apis import youtube_stats
+    youtube_stats.channel_stats.cache_clear()
+    return jsonify({
+        "ok": True,
+        "profile_id": pid,
+        "channel_name": name,
+        "active": pid,
+    })
+
+@bp.route("/api/profiles/delete", methods=["POST"])
+def delete_profile_route():
+    body = request.get_json(force=True) or {}
+    pid = (body.get("profile_id") or "").strip()
+    if not pid:
+        return jsonify({"ok": False, "error": "Missing profile_id"}), 400
+    if not config.delete_profile(pid):
+        return jsonify({"ok": False, "error": "Cannot delete profile (profile not found or it is the only remaining profile)"}), 400
+    return jsonify({"ok": True, "active": config.get_active_profile_id()})
 
 @bp.route("/api/save-settings", methods=["POST"])
 def save_settings_route():

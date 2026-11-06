@@ -80,8 +80,10 @@ def status_route():
         "library_id":     state.get("library_id"),
         "llm":            gemini_client.last_provider,
         "started_at":     state.get("started_at"),
-        "channel_name":   config.CHANNEL_NAME,
-        "model":          config.GEMINI_MODEL if gemini_client.gemini_configured() else "free fallback",
+        "channel_name":    config.CHANNEL_NAME,
+        "channel_niche":   getattr(config, "CHANNEL_NICHE", ""),
+        "channel_profile": config.get_active_profile_id(),
+        "model":           config.GEMINI_MODEL if gemini_client.gemini_configured() else "free fallback",
     })
 
 @bp.route("/video")

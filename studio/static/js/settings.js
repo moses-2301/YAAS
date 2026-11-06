@@ -16,14 +16,14 @@ $("#key-fields").innerHTML = KEYS.map(([id, name, why, link]) => `
   </div>`).join("");
 
 const RANGES = {
-  voice_rate:     { to: v => parseInt(v) || 0, from: v => (v >= 0 ? "+" : "") + v + "%", label: v => (v >= 0 ? "+" : "") + v + "%" },
-  voice_pitch:    { to: v => parseInt(v) || 0, from: v => (v >= 0 ? "+" : "") + v + "Hz", label: v => (v >= 0 ? "+" : "") + v + "Hz" },
-  overlay:        { to: v => Math.round(v * 100), from: v => v / 100, label: v => v + "%" },
-  music_volume:   { to: v => Math.round(v * 100), from: v => v / 100, label: v => v + "%" },
+  voice_rate: { to: v => parseInt(v) || 0, from: v => (v >= 0 ? "+" : "") + v + "%", label: v => (v >= 0 ? "+" : "") + v + "%" },
+  voice_pitch: { to: v => parseInt(v) || 0, from: v => (v >= 0 ? "+" : "") + v + "Hz", label: v => (v >= 0 ? "+" : "") + v + "Hz" },
+  overlay: { to: v => Math.round(v * 100), from: v => v / 100, label: v => v + "%" },
+  music_volume: { to: v => Math.round(v * 100), from: v => v / 100, label: v => v + "%" },
   broll_interval: { to: v => Math.round(v), from: v => +v, label: v => v + " s" },
-  broll_xfade:    { to: v => Math.round(v * 10), from: v => v / 10, label: v => (v / 10).toFixed(1) + " s" },
+  broll_xfade: { to: v => Math.round(v * 10), from: v => v / 10, label: v => (v / 10).toFixed(1) + " s" },
 };
-const TEXT = ["channel_name", "channel_desc", "brand_text", "thumb_style", "gemini_model", "groq_model", "openrouter_model", "render_preset", "kb_start", "kb_end", "privacy", "voice_id", "trends_geo"];
+const TEXT = ["channel_name", "channel_niche", "channel_desc", "brand_text", "thumb_style", "gemini_model", "groq_model", "openrouter_model", "render_preset", "kb_start", "kb_end", "privacy", "voice_id", "trends_geo"];
 const BOOLS = ["fact_grounding", "keyless_llm", "music_enabled", "show_brand", "credit_yaas"];
 Object.entries(RANGES).forEach(([k, r]) => { const el = $("#r-" + k); el.addEventListener("input", () => $("#v-" + k).textContent = r.label(+el.value)); });
 
@@ -49,6 +49,30 @@ async function loadSettings() {
   $("#quick-voice").value = d.voice_id;
   $("#quick-grounding").checked = !!d.fact_grounding;
   $("#upload-privacy").value = d.privacy;
+
+  // Niche selector sync
+  const nicheVal = (d.channel_niche || "").trim();
+  const presetEl = $("#s-channel_niche_preset");
+  const customEl = $("#s-channel_niche_custom");
+  const hiddenEl = $("#s-channel_niche");
+  if (hiddenEl) hiddenEl.value = nicheVal;
+  if (presetEl && customEl) {
+    const opts = [...presetEl.options].map(o => o.value);
+    if (opts.includes(nicheVal) && nicheVal !== "__custom__") {
+      presetEl.value = nicheVal;
+      customEl.style.display = "none";
+      customEl.value = "";
+    } else if (nicheVal) {
+      presetEl.value = "__custom__";
+      customEl.style.display = "inline-block";
+      customEl.value = nicheVal;
+    } else {
+      presetEl.value = "";
+      customEl.style.display = "none";
+      customEl.value = "";
+    }
+  }
+
   brandPreview();
   settingsSnap = JSON.stringify(collectSettings());
   settingsChanged();
@@ -68,7 +92,13 @@ function brandPreview() {
 }));
 async function saveSettings() {
   const r = await api("/api/save-settings", collectSettings());
-  if (r.ok) { toast("Settings saved", "ok"); await loadSettings(); loadHealth(); pollOnce(); }
+  if (r.ok) {
+    toast("Settings saved", "ok");
+    if (typeof loadProfiles === "function") await loadProfiles();
+    await loadSettings();
+    loadHealth();
+    pollOnce();
+  }
   else toast(r.error, "err");
 }
 $("#save-banned").onclick = async () => {
@@ -76,6 +106,27 @@ $("#save-banned").onclick = async () => {
   const r = await api("/api/save-banned-topics", { topics });
   r.ok ? toast("List saved", "ok") : toast(r.error, "err");
 };
+
+// Niche selector UI handlers
+$("#s-channel_niche_preset") && ($("#s-channel_niche_preset").onchange = () => {
+  const v = $("#s-channel_niche_preset").value;
+  const customEl = $("#s-channel_niche_custom");
+  const hiddenEl = $("#s-channel_niche");
+  if (v === "__custom__") {
+    customEl.style.display = "inline-block";
+    customEl.focus();
+    hiddenEl.value = customEl.value.trim();
+  } else {
+    customEl.style.display = "none";
+    hiddenEl.value = v;
+  }
+  settingsChanged();
+});
+
+$("#s-channel_niche_custom") && ($("#s-channel_niche_custom").oninput = () => {
+  $("#s-channel_niche").value = $("#s-channel_niche_custom").value.trim();
+  settingsChanged();
+});
 
 // one floating save bar, shared by Review and Settings
 $("#savebar-save").onclick = () => location.hash === "#settings" ? saveSettings() : saveMeta();

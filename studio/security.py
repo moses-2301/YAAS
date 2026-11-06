@@ -34,11 +34,7 @@ def _same_origin(url: str) -> bool:
 
 def _is_trusted_local_proxy() -> bool:
     """True when request comes through a local reverse proxy (e.g. nginx on 127.0.0.1)."""
-    xff = request.headers.get("X-Forwarded-For", "")
-    if not xff:
-        return False
-    ips = [ip.strip() for ip in xff.split(",") if ip.strip()]
-    return any(ip in _LOCAL_HOSTS for ip in ips) and (request.remote_addr in _LOCAL_HOSTS)
+    return (request.remote_addr in _LOCAL_HOSTS) and bool(request.headers.get("X-Forwarded-For"))
 
 def local_only():
     # DNS rebinding: allow direct localhost requests OR requests forwarded by local reverse proxy

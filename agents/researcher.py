@@ -95,7 +95,8 @@ def _parse(raw: str) -> dict:
 def research_topic(channel_description: str,
                    topic_override: str = "",
                    focus_angle: str = "",
-                   trend_context: list | None = None) -> dict:
+                   trend_context: list | None = None,
+                   channel_niche: str = "") -> dict:
     """
     Research a video topic for the channel.
 
@@ -112,12 +113,15 @@ def research_topic(channel_description: str,
                           dropdown to steer AI picks without locking the topic.
     trend_context       : optional list of headlines trending right now (Trend
                           Radar). The AI may ride one if it fits the niche.
+    channel_niche       : optional channel niche (e.g. "Finance", "Technology").
+                          Constrains suggested topics to this specific niche.
 
     The result carries a "grounding" dict ({facts, sources}) from Wikipedia and
     arXiv that the scriptwriter uses to stay factual and the description cites.
     """
     banned     = load_banned_topics()
     banned_str = ", ".join(f'"{t}"' for t in banned)
+    niche      = (channel_niche or getattr(config, "CHANNEL_NICHE", "")).strip()
 
     # ── MODE 1: USER-SPECIFIED EXACT TOPIC ───────────────────────────────────
     # The old bug: topic_override was prepended to channel_description, but the
@@ -130,10 +134,12 @@ def research_topic(channel_description: str,
         facts_block = (f"\nVERIFIED BACKGROUND (from Wikipedia / arXiv — build on these, don't contradict them):\n"
                        f"{grounding['facts'][:3500]}\n") if grounding["facts"] else ""
 
-        prompt = f"""You are a top YouTube content strategist for a viral science/tech channel.
+        role_desc = f"viral {niche} channel" if niche else "viral science/tech channel"
+        niche_clause = f"\nChannel niche:\n{niche}\n" if niche else ""
+        prompt = f"""You are a top YouTube content strategist for a {role_desc}.
 
 Channel description:
-{channel_description}
+{channel_description}{niche_clause}
 
 MANDATORY INSTRUCTION: You MUST make a video about this EXACT topic:
 >>> {exact_topic} <<<
@@ -186,25 +192,35 @@ Respond with ONLY a valid JSON object. No markdown fences, no explanation:
     if trend_context:
         print(f"   → Trend-aware: {len(trend_context)} live headlines from Trend Radar")
         joined = "\n".join(f"  - {t}" for t in trend_context[:25])
+        niche_hint = f"to the '{niche}' niche and theme" if niche else "to the theme"
         trend_block = (
             "4. TRENDING RIGHT NOW (news, papers, search spikes):\n"
             f"{joined}\n"
-            "   If one of these connects naturally to the theme, build the video around it "
+            f"   If one of these connects naturally {niche_hint}, build the video around it "
             "for timeliness and say so in \"why_now\". If none fit, ignore them.\n"
         )
 
-    prompt = f"""You are a top YouTube content strategist for a viral science/tech channel.
+    role_desc = f"viral {niche} channel" if niche else "viral science/tech channel"
+    niche_clause = f"\nChannel niche:\n{niche}\n" if niche else ""
+    niche_instruction = ""
+    if niche:
+        niche_instruction = (
+            f"0. NICHE REQUIREMENT: All suggested topics, angles, and titles MUST fit strictly within the '{niche}' niche. "
+            f"Do NOT suggest topics outside this domain.\n"
+        )
+
+    prompt = f"""You are a top YouTube content strategist for a {role_desc}.
 
 Channel description:
-{channel_description}
+{channel_description}{niche_clause}
 
 CRITICAL INSTRUCTIONS FOR THIS RUN:
-1. Focus entirely on this specific theme: >>> {chosen_angle} <<<
+{niche_instruction}1. Focus entirely on this specific theme: >>> {chosen_angle} <<<
 2. BANNED TOPICS: Do NOT suggest any of the following — we already made videos about them: {banned_str}. You must give me a brand new, highly original concept.
 3. Cache Bust ID: {time.time()} (Ensure completely unique output).
 {trend_block}
 Your mission:
-1. Think of 3-4 highly compelling video topic ideas within that specific theme.
+1. Think of 3-4 highly compelling video topic ideas within that specific theme{(' and matching the ' + niche + ' niche') if niche else ''}.
 2. Select the single BEST topic that is genuinely mind-blowing, timely, and explainable in 6-8 minutes.
 
 Respond with ONLY a valid JSON object. No markdown fences, no explanation:

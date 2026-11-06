@@ -83,7 +83,7 @@ def test_reverse_proxy_with_x_forwarded_for_is_allowed(client):
 def test_reverse_proxy_with_forwarded_client_ip_is_allowed(client):
     headers = {
         "Host": "subdomain.example.com",
-        "X-Forwarded-For": "203.0.113.195, 127.0.0.1",
+        "X-Forwarded-For": "203.0.113.195",
         "X-Forwarded-Proto": "https",
     }
     assert client.get("/api/banned-topics", headers=headers).status_code == 200

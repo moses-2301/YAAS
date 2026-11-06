@@ -15,59 +15,90 @@ import config
 
 # Older versions pickled the token to youtube_token.pickle. That file is never
 # loaded (unpickling runs code); users sign in once more and can delete it.
+# Token and OAuth configuration — now profile-aware and using port 8082
 TOKEN_FILE = "youtube_token.json"
+OAUTH_PORT = 8082
 
 TITLE_MAX = 100          # characters
 DESCRIPTION_MAX = 5000   # characters
 TAGS_MAX_CHARS = 500     # all tags together, as YouTube counts them
 
 
-def has_token() -> bool:
-    return os.path.exists(TOKEN_FILE)
+def get_token_file(profile_id: str | None = None) -> str:
+    """Return the token file path for the given or currently active profile."""
+    pid = profile_id or (config.get_active_profile_id() if hasattr(config, "get_active_profile_id") else "default")
+    prof_file = f"youtube_token_{pid}.json"
+    if os.path.exists(prof_file):
+        return prof_file
+    # Check if this is the first / default profile
+    first_pid = "default"
+    if hasattr(config, "list_profiles"):
+        profs = config.list_profiles()
+        if profs:
+            first_pid = profs[0]["id"]
+    if pid in ("default", first_pid):
+        return TOKEN_FILE
+    return prof_file
 
 
-def _save_token(creds) -> None:
+def get_client_secret_file(profile_id: str | None = None) -> str:
+    """Return the client secret file for the profile, falling back to default."""
+    pid = profile_id or (config.get_active_profile_id() if hasattr(config, "get_active_profile_id") else "default")
+    prof_secret = f"client_secret_{pid}.json"
+    if os.path.exists(prof_secret):
+        return prof_secret
+    return getattr(config, "YOUTUBE_CLIENT_SECRET", "client_secret.json")
+
+
+def has_token(profile_id: str | None = None) -> bool:
+    return os.path.exists(get_token_file(profile_id))
+
+
+def _save_token(creds, profile_id: str | None = None) -> None:
     """Write the token readable by the current user only (where the OS allows it)."""
-    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    token_file = get_token_file(profile_id)
+    fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(creds.to_json())
 
 
-def _load_token():
+def _load_token(profile_id: str | None = None):
     from google.oauth2.credentials import Credentials
-    if not os.path.exists(TOKEN_FILE):
+    token_file = get_token_file(profile_id)
+    if not os.path.exists(token_file):
         return None
     try:
-        return Credentials.from_authorized_user_file(TOKEN_FILE, config.YOUTUBE_SCOPES)
+        return Credentials.from_authorized_user_file(token_file, config.YOUTUBE_SCOPES)
     except ValueError as e:              # malformed / missing fields → sign in again
-        print(f"   ⚠ Ignoring unreadable {TOKEN_FILE}: {e}")
+        print(f"   ⚠ Ignoring unreadable {token_file}: {e}")
         return None
 
 
-def get_credentials(log=print):
-    """Return valid OAuth credentials, refreshing or signing in as needed."""
+def get_credentials(log=print, profile_id: str | None = None):
+    """Return valid OAuth credentials, refreshing or signing in as needed on port 8082."""
     from google.auth.transport.requests import Request
     from google_auth_oauthlib.flow import InstalledAppFlow
 
-    creds = _load_token()
+    creds = _load_token(profile_id)
     if creds and not creds.valid and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-            _save_token(creds)
+            _save_token(creds, profile_id)
         except Exception as e:           # revoked or expired refresh token
             log(f"Saved YouTube sign-in could not be refreshed ({e}); signing in again.")
             creds = None
 
     if not creds or not creds.valid:
-        if not os.path.exists(config.YOUTUBE_CLIENT_SECRET):
+        secret_file = get_client_secret_file(profile_id)
+        if not os.path.exists(secret_file):
             raise FileNotFoundError(
-                f"YouTube OAuth file not found: {config.YOUTUBE_CLIENT_SECRET}\n"
+                f"YouTube OAuth file not found: {secret_file}\n"
                 "Follow SETUP.md step 4 to create it in Google Cloud Console."
             )
         flow = InstalledAppFlow.from_client_secrets_file(
-            config.YOUTUBE_CLIENT_SECRET, config.YOUTUBE_SCOPES)
-        creds = flow.run_local_server(port=8080)
-        _save_token(creds)
+            secret_file, config.YOUTUBE_SCOPES)
+        creds = flow.run_local_server(port=OAUTH_PORT)
+        _save_token(creds, profile_id)
     return creds
 
 

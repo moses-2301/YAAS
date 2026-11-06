@@ -14,7 +14,15 @@ def trends():
     from apis import trends as tr
     if request.args.get("refresh") == "1":
         tr.get_trends.cache_clear()
-    return jsonify(tr.get_trends())
+    data = tr.get_trends()
+    niche = request.args.get("niche", "").strip()
+    res = {
+        **data,
+        "niches": config.list_saved_niches(),
+    }
+    if niche:
+        res["filtered"] = tr.filter_trends_by_niche(data.get("sources", {}), niche)
+    return jsonify(res)
 
 @bp.route("/api/channel-stats")
 def channel_stats():

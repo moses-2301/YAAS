@@ -20,6 +20,21 @@
     <a href="#library" data-view="library">My videos</a>
   </nav>
   <div class="bar-right">
+    <div class="channel-dropdown-wrap" id="channel-dropdown-wrap">
+      <button class="channel-pill" id="channel-pill" type="button" title="Active channel profile">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+        <span id="channel-pill-name">Channel</span>
+        <span class="chevron">▾</span>
+      </button>
+      <div class="channel-menu" id="channel-menu">
+        <div class="channel-menu-title">Channel Profiles</div>
+        <div class="channel-menu-items" id="channel-menu-items"></div>
+        <div class="channel-menu-divider"></div>
+        <button class="channel-menu-add-btn" id="channel-menu-add-btn" type="button">
+          <span>+</span> Add new channel
+        </button>
+      </div>
+    </div>
     <div class="status-pill" id="status-pill"><i></i><span id="status-text">Ready</span></div>
     <a class="settings-btn" id="settings-btn" href="#settings" title="Settings"><span><i></i><i></i><i></i><i></i></span><em>Settings</em></a>
   </div>
@@ -332,10 +347,31 @@
 <section class="view" id="view-settings">
 
   <article class="card s24 flat">
-    <div class="guide">
+    <div class="guide" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px">
       <div>
         <h2>Settings</h2>
         <p>YAAS works without any keys. Free keys make scripts and photos better and let you publish. Keys stay on this computer in a <span class="mono">.env</span> file.</p>
+      </div>
+      <div class="niche-selector-card" id="niche-selector-card">
+        <div class="label" style="font-weight:600;display:flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+          Research Niche
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <select id="s-channel_niche_preset" class="niche-select">
+            <option value="">General (no niche)</option>
+            <option value="Finance &amp; Psychology">Finance &amp; Psychology</option>
+            <option value="Technology &amp; AI">Technology &amp; AI</option>
+            <option value="Science &amp; Nature">Science &amp; Nature</option>
+            <option value="History &amp; Mystery">History &amp; Mystery</option>
+            <option value="Health &amp; Fitness">Health &amp; Fitness</option>
+            <option value="Business &amp; Entrepreneurship">Business &amp; Entrepreneurship</option>
+            <option value="__custom__">Custom niche...</option>
+          </select>
+          <input type="text" id="s-channel_niche_custom" placeholder="e.g. Space Exploration" style="display:none;width:170px">
+        </div>
+        <div class="hint" style="margin-top:4px">Focuses trending topic suggestions to this niche</div>
+        <input type="hidden" id="s-channel_niche" value="">
       </div>
     </div>
   </article>
@@ -448,6 +484,30 @@
   <span>made by <a href="https://raunakpatil.com" target="_blank" rel="noopener">Raunak Patil · raunakpatil.com</a></span>
   <a href="https://github.com/raunakpatil/youtube-agentic-ai-studio" target="_blank" rel="noopener">GitHub</a>
 </footer>
+
+<!-- Modal: Add New Channel Profile -->
+<div class="modal-backdrop" id="add-channel-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Add Channel Profile</h3>
+      <button class="modal-close-btn" id="add-channel-modal-close" type="button">✕</button>
+    </div>
+    <form id="add-channel-form">
+      <div class="field" style="margin-top:14px">
+        <div class="label">Channel Name *</div>
+        <input type="text" id="new-channel-name-input" required placeholder="e.g. Brain Paradoxes" autocomplete="off">
+      </div>
+      <div class="field">
+        <div class="label">Research Niche <small>optional</small></div>
+        <input type="text" id="new-channel-niche-input" placeholder="e.g. Psychology &amp; Mind" autocomplete="off">
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" id="add-channel-modal-cancel">Cancel</button>
+        <button type="submit" class="btn btn-white">Create Channel</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <div class="savebar" id="savebar">
   <i></i><span>Unsaved changes</span>

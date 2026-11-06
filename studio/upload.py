@@ -11,9 +11,10 @@ from uploader import youtube as yt_uploader
 
 bp = Blueprint("upload", __name__)
 
-def secret_ok():
+def secret_ok(profile_id=None):
+    secret_file = yt_uploader.get_client_secret_file(profile_id)
     try:
-        with open(config.YOUTUBE_CLIENT_SECRET, encoding="utf-8") as f:
+        with open(secret_file, encoding="utf-8") as f:
             return "YOUR_CLIENT_ID" not in f.read()
     except Exception:
         return False

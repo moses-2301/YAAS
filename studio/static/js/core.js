@@ -67,3 +67,137 @@ document.addEventListener("click", e => {
   const a = e.target.closest('a[href^="#rv-"]');
   if (a) { e.preventDefault(); $(a.getAttribute("href")).scrollIntoView({ behavior: "smooth", block: "start" }); }
 });
+
+/* ═══════════════════════════ channel profiles ═══════════════════════════ */
+let currentProfileId = "";
+let profileList = [];
+
+async function loadProfiles() {
+  try {
+    const data = await api("/api/profiles");
+    profileList = data.profiles || [];
+    currentProfileId = data.active || "";
+    renderProfileSelector();
+    if (typeof renderTrends === "function" && typeof trends !== "undefined" && trends) {
+      renderTrends();
+    }
+  } catch (e) {
+    console.error("Failed to load profiles:", e);
+  }
+}
+
+function renderProfileSelector() {
+  const activeObj = profileList.find(p => p.id === currentProfileId) || profileList[0];
+  const pillName = $("#channel-pill-name");
+  if (pillName && activeObj) {
+    pillName.textContent = activeObj.name || "Channel";
+  }
+  const itemsContainer = $("#channel-menu-items");
+  if (!itemsContainer) return;
+  itemsContainer.innerHTML = profileList.map(p => `
+    <button type="button" class="channel-menu-item ${p.id === currentProfileId ? "active" : ""}" data-pid="${esc(p.id)}">
+      <div>
+        <b>${esc(p.name)}</b>
+        ${p.niche ? `<span class="ch-sub">${esc(p.niche)}</span>` : ""}
+      </div>
+      ${p.id === currentProfileId ? `<span class="check">✓</span>` : ""}
+    </button>
+  `).join("");
+
+  $$("#channel-menu-items .channel-menu-item").forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const pid = btn.dataset.pid;
+      if (pid === currentProfileId) {
+        $("#channel-menu").classList.remove("open");
+        return;
+      }
+      await switchProfile(pid);
+    };
+  });
+}
+
+async function switchProfile(pid) {
+  try {
+    const res = await api("/api/profiles/active", { profile_id: pid });
+    if (res.ok) {
+      currentProfileId = pid;
+      $("#channel-menu").classList.remove("open");
+      toast(`Switched to ${res.channel_name}`, "ok");
+      await loadProfiles();
+      if (typeof loadSettings === "function") await loadSettings();
+      if (typeof loadChannel === "function") await loadChannel();
+      if (typeof loadHealth === "function") await loadHealth();
+    } else {
+      toast(res.error || "Failed to switch channel", "err");
+    }
+  } catch (e) {
+    toast("Error switching channel", "err");
+  }
+}
+
+document.addEventListener("click", e => {
+  const wrap = $("#channel-dropdown-wrap");
+  const menu = $("#channel-menu");
+  if (!wrap || !menu) return;
+  if (wrap.contains(e.target)) {
+    if (e.target.closest("#channel-pill")) {
+      menu.classList.toggle("open");
+    }
+  } else {
+    menu.classList.remove("open");
+  }
+});
+
+function initChannelModal() {
+  const addBtn = $("#channel-menu-add-btn");
+  const modal = $("#add-channel-modal");
+  const closeBtn = $("#add-channel-modal-close");
+  const cancelBtn = $("#add-channel-modal-cancel");
+  const form = $("#add-channel-form");
+
+  if (addBtn && modal) {
+    addBtn.onclick = () => {
+      $("#channel-menu").classList.remove("open");
+      $("#new-channel-name-input").value = "";
+      $("#new-channel-niche-input").value = "";
+      modal.classList.add("open");
+      setTimeout(() => $("#new-channel-name-input").focus(), 100);
+    };
+  }
+
+  const closeModal = () => modal && modal.classList.remove("open");
+  if (closeBtn) closeBtn.onclick = closeModal;
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+
+  if (form) {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = $("#new-channel-name-input").value.trim();
+      const niche = $("#new-channel-niche-input").value.trim();
+      if (!name) return toast("Channel name is required", "err");
+      try {
+        const res = await api("/api/profiles/create", { name, niche });
+        if (res.ok) {
+          closeModal();
+          toast(`Created channel "${name}"!`, "ok");
+          currentProfileId = res.profile_id;
+          await loadProfiles();
+          if (typeof loadSettings === "function") await loadSettings();
+          if (typeof loadChannel === "function") await loadChannel();
+          location.hash = "#settings";
+        } else {
+          toast(res.error || "Failed to create channel", "err");
+        }
+      } catch (err) {
+        toast("Error creating channel: " + err.message, "err");
+      }
+    };
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initChannelModal);
+} else {
+  initChannelModal();
+}

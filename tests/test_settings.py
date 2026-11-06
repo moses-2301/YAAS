@@ -57,9 +57,9 @@ def test_broken_file_is_ignored_not_fatal(settings_file, content):
 def test_save_keeps_only_values_that_differ_from_defaults(settings_file):
     config.save_settings({"CHANNEL_NAME": "Mine", "VOICE_ID": config.DEFAULTS["VOICE_ID"]})
     config.save_settings({"MUSIC_VOLUME": 0.3})                       # merges
-    assert json.loads(settings_file.read_text()) == {"CHANNEL_NAME": "Mine", "MUSIC_VOLUME": 0.3}
+    assert config.load_settings() == {"CHANNEL_NAME": "Mine", "MUSIC_VOLUME": 0.3}
     config.save_settings({"CHANNEL_NAME": config.DEFAULTS["CHANNEL_NAME"]})   # back to default
-    assert json.loads(settings_file.read_text()) == {"MUSIC_VOLUME": 0.3}
+    assert config.load_settings() == {"MUSIC_VOLUME": 0.3}
     assert not os.path.exists(str(settings_file) + ".tmp")
 
 
@@ -98,7 +98,7 @@ def test_settings_page_writes_settings_json_not_config_py(settings_file, monkeyp
     })
     assert r.get_json() == {"ok": True}
     assert open(cfg, encoding="utf-8").read() == before
-    saved = json.loads(settings_file.read_text())
+    saved = config.load_settings()
     assert saved == {
         "CHANNEL_NAME": "Space Facts", "MUSIC_VOLUME": 0.25, "SHOW_CHANNEL_BRAND": False,
         "IMAGE_SOURCES": ["nasa", "openverse"],
@@ -154,5 +154,68 @@ def test_import_settings_command(tmp_path, settings_file, capsys):
     old = tmp_path / "old_config.py"
     old.write_text(OLD_CONFIG)
     studio_settings.import_settings(str(old))
-    assert json.loads(settings_file.read_text())["CHANNEL_NAME"] == "Old Channel"
+    assert config.load_settings()["CHANNEL_NAME"] == "Old Channel"
     assert "Imported 4 setting(s)" in capsys.readouterr().out
+
+
+# ── multi-channel profiles and niche ──────────────────────────────────────────
+
+def test_multi_channel_profiles_and_niche(settings_file, restore_config):
+    client = gui.app.test_client()
+
+    # 1. Check initial profiles
+    r = client.get("/api/profiles", headers=LOCAL).get_json()
+    assert "active" in r and len(r["profiles"]) >= 1
+
+    # 2. Save settings including channel_niche
+    r = client.post("/api/save-settings", headers=LOCAL, json={
+        "channel_name": "Finance Mindset",
+        "channel_niche": "Finance & Psychology",
+        "voice_id": "en-GB-RyanNeural",
+    })
+    assert r.get_json() == {"ok": True}
+    assert config.CHANNEL_NAME == "Finance Mindset"
+    assert config.CHANNEL_NICHE == "Finance & Psychology"
+    assert config.VOICE_ID == "en-GB-RyanNeural"
+
+    # 3. Create a second profile
+    r = client.post("/api/profiles/create", headers=LOCAL, json={
+        "name": "Tech Horizons",
+        "niche": "Technology & AI",
+    })
+    res = r.get_json()
+    assert res["ok"] is True
+    tech_id = res["profile_id"]
+    assert config.get_active_profile_id() == tech_id
+    assert config.CHANNEL_NAME == "Tech Horizons"
+    assert config.CHANNEL_NICHE == "Technology & AI"
+    # Notice voice_id resets to default for the new profile
+    assert config.VOICE_ID == config.DEFAULTS["VOICE_ID"]
+
+    # 4. Save settings on the second profile
+    client.post("/api/save-settings", headers=LOCAL, json={
+        "voice_id": "en-US-BrianNeural",
+    })
+    assert config.VOICE_ID == "en-US-BrianNeural"
+
+    # 5. List profiles
+    profs = client.get("/api/profiles", headers=LOCAL).get_json()["profiles"]
+    assert len(profs) == 2
+    tech_prof = next(p for p in profs if p["id"] == tech_id)
+    assert tech_prof["active"] is True
+    first_pid = next(p["id"] for p in profs if p["id"] != tech_id)
+
+    # 6. Switch back to the first profile
+    r = client.post("/api/profiles/active", headers=LOCAL, json={"profile_id": first_pid})
+    assert r.get_json()["ok"] is True
+    assert config.get_active_profile_id() == first_pid
+    assert config.CHANNEL_NAME == "Finance Mindset"
+    assert config.CHANNEL_NICHE == "Finance & Psychology"
+    assert config.VOICE_ID == "en-GB-RyanNeural"
+
+    # 7. Delete the second profile
+    r = client.post("/api/profiles/delete", headers=LOCAL, json={"profile_id": tech_id})
+    assert r.get_json()["ok"] is True
+    profs_after = client.get("/api/profiles", headers=LOCAL).get_json()["profiles"]
+    assert len(profs_after) == 1
+    assert profs_after[0]["id"] == first_pid

@@ -1,24 +1,123 @@
 /* ═══════════════════════════ home: trending ideas ═══════════════════════════ */
 const SRC_COLORS = { google: "#5cc8ff", wikipedia: "#f3f3f3", hackernews: "#ff9a3d", spaceflight: "#a98bff", arxiv: "#38ffb3" };
-const SRC_NAMES = { google: "Searches", wikipedia: "Wikipedia", hackernews: "Tech", spaceflight: "Space", arxiv: "Science papers" };
-let trends = null, trendSrc = "all";
+let trends = null, trendNiche = "all";
+
+const NICHE_KEYWORDS = {
+  tech: ["tech", "ai", "software", "code", "coding", "developer", "hardware", "chip", "semiconductor", "cyber", "robot", "cloud", "model", "algorithm", "llm", "apple", "google", "microsoft", "nvidia", "meta", "openai", "linux", "programming", "computer", "app", "web", "digital", "hack"],
+  science: ["science", "physics", "quantum", "space", "astronomy", "biology", "chemistry", "research", "paper", "lab", "study", "planet", "star", "galaxy", "telescope", "nasa", "spacex", "orbit", "rocket", "dna", "gene", "particle", "gravity", "evolution", "phase"],
+  space: ["space", "astronomy", "nasa", "spacex", "rocket", "orbit", "planet", "mars", "moon", "star", "galaxy", "telescope", "cosmic", "satellite", "astronaut", "universe", "iss", "launch", "flight"],
+  finance: ["finance", "money", "invest", "stock", "market", "economy", "economic", "crypto", "bitcoin", "ethereum", "trading", "inflation", "fed", "rate", "dollar", "bank", "banking", "wealth", "fund", "revenue", "profit", "capital", "fintech", "startup", "valuation", "spend", "budget", "debt"],
+  psychology: ["psychology", "psychological", "mind", "brain", "behavior", "mental", "cognitive", "bias", "decision", "emotion", "memory", "habit", "subconscious"],
+  crypto: ["crypto", "bitcoin", "ethereum", "blockchain", "token", "web3", "defi", "wallet", "nft", "coinbase", "binance", "mining"],
+  history: ["history", "historic", "historical", "ancient", "war", "battle", "century", "empire", "king", "queen", "dynasty", "civilization", "archaeology", "medieval", "past", "rebellion", "monarch", "wwii", "wwi", "roman", "egypt"],
+  health: ["health", "fitness", "medical", "medicine", "doctor", "hospital", "disease", "virus", "vaccine", "diet", "nutrition", "workout", "exercise", "brain", "mental", "cure", "therapy", "wellness", "muscle", "cardio", "sleep"],
+  gaming: ["game", "gaming", "playstation", "xbox", "nintendo", "steam", "gamer", "rpg", "multiplayer", "esports", "console", "gameplay", "trailer"],
+};
+
+function matchWord(word, text) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}s?\\b`, "i").test(text);
+}
+
+function matchesNiche(item, niche) {
+  if (!niche || ["all", "general", "general (no niche)"].includes(niche.trim().toLowerCase())) return true;
+  const n = niche.trim().toLowerCase();
+  const title = (item.title || "").toLowerCase();
+  const detail = (item.detail || "").toLowerCase();
+  const src = (item.k || item.source || "").toLowerCase();
+  const text = `${title} ${detail}`;
+
+  if (text.includes(n)) return true;
+
+  if (src === "spaceflight" && ["space", "astro", "flight", "universe"].some(k => n.includes(k))) return true;
+  if (src === "hackernews" && ["tech", "software", "code", "programming", "developer", "startup", "computer"].some(k => n.includes(k))) return true;
+  if (src === "arxiv" && ["science", "physics", "math", "academic", "research", "paper", "quantum"].some(k => n.includes(k))) return true;
+
+  for (const [cat, kws] of Object.entries(NICHE_KEYWORDS)) {
+    if (n.includes(cat)) {
+      for (const kw of kws) {
+        if (matchWord(kw, text)) return true;
+      }
+    }
+  }
+
+  const tokens = (n.match(/[a-z0-9]+/g) || []).filter(t => t.length > 2 && !["and", "the", "for", "with", "from", "about"].includes(t));
+  for (const token of tokens) {
+    for (const [cat, kws] of Object.entries(NICHE_KEYWORDS)) {
+      if (token === cat || cat.includes(token)) {
+        for (const kw of kws) {
+          if (matchWord(kw, text)) return true;
+        }
+      }
+    }
+    if (matchWord(token, text)) return true;
+  }
+  return false;
+}
+
 async function loadTrends(refresh) {
   $("#trend-refresh").classList.add("spin");
   try { trends = await api("/api/trends" + (refresh ? "?refresh=1" : "")); renderTrends(); }
   catch (e) { $("#trend-list").innerHTML = `<div class="empty" style="grid-column:1/-1">Couldn't load trends. Check your internet connection.</div>`; }
   $("#trend-refresh").classList.remove("spin");
 }
+
 function renderTrends() {
+  if (!trends || !trends.sources) return;
   const ok = Object.entries(trends.sources).filter(([, s]) => s.ok && s.items.length);
-  $("#src-filter").innerHTML = `<span class="chip ${trendSrc === "all" ? "on" : ""}" data-k="all">All</span>` +
-    ok.map(([k, s]) => `<span class="chip ${trendSrc === k ? "on" : ""}" data-k="${k}"><i style="background:${SRC_COLORS[k]}"></i>${SRC_NAMES[k] || s.label}</span>`).join("");
-  $$("#src-filter .chip").forEach(c => c.onclick = () => { trendSrc = c.dataset.k; renderTrends(); });
-  const lists = ok.filter(([k]) => trendSrc === "all" || trendSrc === k).map(([k, s]) => s.items.map(it => ({ ...it, k })));
-  const items = [];
-  for (let i = 0; lists.some(l => l[i]); i++) lists.forEach(l => l[i] && items.push(l[i]));
-  $("#trend-list").innerHTML = items.slice(0, trendSrc === "all" ? 14 : 20).map(it =>
-    `<button class="trend-item" data-title="${esc(it.title)}" title="${esc(it.detail || it.title)}"><i style="background:${SRC_COLORS[it.k]}"></i><span>${esc(it.title)}</span><em>Use →</em></button>`).join("")
-    || `<div class="empty" style="grid-column:1/-1">Nothing here right now.</div>`;
+
+  // Extract saved niches from profileList and trends.niches
+  const savedNiches = [];
+  if (Array.isArray(profileList)) {
+    for (const p of profileList) {
+      const n = (p.niche || "").trim();
+      if (n && !savedNiches.some(x => x.toLowerCase() === n.toLowerCase())) {
+        savedNiches.push(n);
+      }
+    }
+  }
+  if (trends && Array.isArray(trends.niches)) {
+    for (const n of trends.niches) {
+      const trimmed = (n || "").trim();
+      if (trimmed && !savedNiches.some(x => x.toLowerCase() === trimmed.toLowerCase())) {
+        savedNiches.push(trimmed);
+      }
+    }
+  }
+
+  // If current trendNiche is not in savedNiches and not "all", fallback to "all"
+  if (trendNiche !== "all" && !savedNiches.some(n => n.toLowerCase() === trendNiche.toLowerCase())) {
+    trendNiche = "all";
+  }
+
+  // Render tabs: "All" first, then each unique saved niche
+  let chipsHtml = `<span class="chip ${trendNiche === "all" ? "on" : ""}" data-niche="all">All</span>`;
+  if (savedNiches.length > 0) {
+    chipsHtml += savedNiches.map(n =>
+      `<span class="chip ${trendNiche.toLowerCase() === n.toLowerCase() ? "on" : ""}" data-niche="${esc(n)}">${esc(n)}</span>`
+    ).join("");
+  }
+  $("#src-filter").innerHTML = chipsHtml;
+  $$("#src-filter .chip").forEach(c => c.onclick = () => {
+    trendNiche = c.dataset.niche;
+    renderTrends();
+  });
+
+  // Interleave items from available sources
+  const lists = ok.map(([k, s]) => s.items.map(it => ({ ...it, k })));
+  const allItems = [];
+  for (let i = 0; lists.some(l => l[i]); i++) lists.forEach(l => l[i] && allItems.push(l[i]));
+
+  // Filter items matching active niche tab
+  const items = (trendNiche === "all")
+    ? allItems
+    : allItems.filter(it => matchesNiche(it, trendNiche));
+
+  const limit = trendNiche === "all" ? 14 : 20;
+  $("#trend-list").innerHTML = items.slice(0, limit).map(it =>
+    `<button class="trend-item" data-title="${esc(it.title)}" title="${esc(it.detail || it.title)}"><i style="background:${SRC_COLORS[it.k] || '#fff'}"></i><span>${esc(it.title)}</span><em>Use →</em></button>`
+  ).join("") || `<div class="empty" style="grid-column:1/-1">No trending ideas found for "${esc(trendNiche)}". Try "All" or refresh.</div>`;
+
   $$("#trend-list .trend-item").forEach(el => el.onclick = () => useTopic(el.dataset.title));
   const age = Math.round((Date.now() / 1000 - trends.fetched_at) / 60);
   $("#trend-age").textContent = age < 1 ? "just updated" : `updated ${age} min ago`;

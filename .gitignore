@@ -17,18 +17,35 @@ env/
 .env/
 ENV/
 
-# ── Secrets — NEVER commit these ─────────
-# Google OAuth credentials: keep the real file local.
+# ── Secrets & Config — NEVER commit these ─────────
+# Google OAuth credentials: keep the real files local.
 # client_secret.example.json shows the shape and is the only one committed.
-client_secret.json
-client_secret_*.json
-youtube_token.json
-youtube_token.pickle
+client_secret*.json
+!client_secret.example.json
+youtube_token*.json
+youtube_token*.pickle
+
+# Environment files
 .env
-settings.json
-settings.json.tmp
+.env.*
+!.env.example
+
+# User settings and backups
+settings*.json
+settings*.json.tmp
 *.pickle
 *.pkl
+
+# ── SSL/TLS & Reverse Proxy Credentials ──
+# Certificates, private keys, and auth files from Cloudflare/Nginx setup
+*.pem
+*.key
+*.crt
+*.csr
+*.cer
+*.pfx
+*.p12
+.htpasswd
 
 # ── Downloaded fonts (fetched from Google Fonts on first run) ──
 assets/fonts/
@@ -39,20 +56,36 @@ output/images/
 *.mp4
 *.mp3
 *.wav
+*.webp
+*.gif
 *.jpg
 *.jpeg
 *.png
 # allow docs screenshots
 !docs/screenshots/*.png
 
+# ── Temporary & backup files ─────────────
+*.tmp
+*.bak
+*~
+
+# ── Testing & Coverage ───────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+
 # ── OS junk ──────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
 
 # ── IDE ───────────────────────────────────
 .vscode/
 .idea/
+.cursor/
+.zed/
 *.swp
 *.swo
 

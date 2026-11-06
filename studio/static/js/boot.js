@@ -8,6 +8,7 @@ Object.assign(loaders, {
 setHero("form");
 route();
 pollStatus();
+loadProfiles();
 loadTrends();
 loadHealth();
 loadSettings().catch(() => {});
