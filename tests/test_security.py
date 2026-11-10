@@ -120,7 +120,11 @@ def test_hostname_parsing(netloc, name):
 
 
 def test_real_oauth_secret_is_never_committed():
-    ignored = subprocess.run(["git", "check-ignore", "-q", "client_secret.json"], cwd=ROOT)
+    import shutil
+    git_bin = shutil.which("git")
+    if not git_bin:
+        pytest.skip("git is not installed on PATH in this environment")
+    ignored = subprocess.run([git_bin, "check-ignore", "-q", "client_secret.json"], cwd=ROOT)
     assert ignored.returncode == 0, "client_secret.json must be git-ignored"
-    example = subprocess.run(["git", "check-ignore", "-q", "client_secret.example.json"], cwd=ROOT)
+    example = subprocess.run([git_bin, "check-ignore", "-q", "client_secret.example.json"], cwd=ROOT)
     assert example.returncode == 1, "the example file should stay tracked"

@@ -106,13 +106,14 @@ function renderProfileSelector() {
 
   $$("#channel-menu-items .channel-menu-item").forEach(btn => {
     btn.onclick = async (e) => {
+      e.preventDefault();
       e.stopPropagation();
+      const menu = $("#channel-menu");
+      if (menu) menu.classList.remove("open");
       const pid = btn.dataset.pid;
-      if (pid === currentProfileId) {
-        $("#channel-menu").classList.remove("open");
-        return;
+      if (pid && pid !== currentProfileId) {
+        await switchProfile(pid);
       }
-      await switchProfile(pid);
     };
   });
 }
@@ -122,7 +123,8 @@ async function switchProfile(pid) {
     const res = await api("/api/profiles/active", { profile_id: pid });
     if (res.ok) {
       currentProfileId = pid;
-      $("#channel-menu").classList.remove("open");
+      const menu = $("#channel-menu");
+      if (menu) menu.classList.remove("open");
       toast(`Switched to ${res.channel_name}`, "ok");
       await loadProfiles();
       if (typeof loadSettings === "function") await loadSettings();
@@ -136,18 +138,34 @@ async function switchProfile(pid) {
   }
 }
 
-document.addEventListener("click", e => {
-  const wrap = $("#channel-dropdown-wrap");
+function initChannelDropdown() {
+  const pill = $("#channel-pill");
   const menu = $("#channel-menu");
-  if (!wrap || !menu) return;
-  if (wrap.contains(e.target)) {
-    if (e.target.closest("#channel-pill")) {
-      menu.classList.toggle("open");
+  const wrap = $("#channel-dropdown-wrap");
+  if (!pill || !menu || !wrap) return;
+
+  pill.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    menu.classList.toggle("open");
+  };
+
+  menu.onclick = (e) => {
+    e.stopPropagation();
+  };
+
+  document.addEventListener("click", e => {
+    if (!wrap.contains(e.target)) {
+      menu.classList.remove("open");
     }
-  } else {
-    menu.classList.remove("open");
-  }
-});
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      menu.classList.remove("open");
+    }
+  });
+}
 
 function initChannelModal() {
   const addBtn = $("#channel-menu-add-btn");
@@ -157,8 +175,11 @@ function initChannelModal() {
   const form = $("#add-channel-form");
 
   if (addBtn && modal) {
-    addBtn.onclick = () => {
-      $("#channel-menu").classList.remove("open");
+    addBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const menu = $("#channel-menu");
+      if (menu) menu.classList.remove("open");
       $("#new-channel-name-input").value = "";
       $("#new-channel-niche-input").value = "";
       modal.classList.add("open");
@@ -196,8 +217,13 @@ function initChannelModal() {
   }
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initChannelModal);
-} else {
+function initHeaderControls() {
+  initChannelDropdown();
   initChannelModal();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initHeaderControls);
+} else {
+  initHeaderControls();
 }
